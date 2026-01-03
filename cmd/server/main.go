@@ -5,14 +5,22 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 	"time"
 
+	"github.com/joho/godotenv"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
+
+	pb "github.com/Ant0nioSouza/GoVox/api/proto"
 	"github.com/Ant0nioSouza/GoVox/internal/database"
+	grpcserver "github.com/Ant0nioSouza/GoVox/internal/grpc"
 	"github.com/Ant0nioSouza/GoVox/pkg/models"
 	"github.com/Ant0nioSouza/GoVox/pkg/utils"
-	"github.com/joho/godotenv"
 )
 
 func main() {
@@ -54,15 +62,52 @@ func main() {
 	fmt.Printf("📊 Connection pool: %d/%d active, %d idle\n\n",
 		stats["acquired_conns"], stats["max_conns"], stats["idle_conns"])
 
-	// Testa operações básicas
-	fmt.Println("🧪 Running database tests...")
-	if err := testDatabase(ctx, db); err != nil {
-		log.Fatalf("❌ Database tests failed: %v", err)
-	}
-	fmt.Println("✅ All database tests passed!\n")
+	// TODO: Inicializar o whisper aqui
+	var transcriber grpcserver.TranscriberInterface
 
-	fmt.Println("🚀 Server ready!")
-	fmt.Println("Press Ctrl+C to stop\n")
+	fmt.Println("🔧 Setting up gRPC server...")
+	grpcServer := grpc.NewServer(
+		grpc.MaxRecvMsgSize(50*1024*1024), // 50MB max message size (para chunks grandes)
+		grpc.MaxSendMsgSize(50*1024*1024),
+	)
+
+	// Registra o serviço
+	transcriptionServer := grpcserver.NewServer(db, transcriber)
+	pb.RegisterTranscriptionServiceServer(grpcServer, transcriptionServer)
+
+	reflection.Register(grpcServer)
+
+	// Inicia o servidor gRPC
+	port := getEnv("SERVER_PORT", "50051")
+	listener, err := net.Listen("tcp", ":"+port)
+	if err != nil {
+		log.Fatalf("❌ Failed to listen on port %s: %v", port, err)
+	}
+
+	fmt.Printf("✅ gRPC server listening on port %s\n", port)
+	fmt.Println("🚀 Server ready!\n")
+	fmt.Println("Available endpoints:")
+	fmt.Println("  - CreateSession")
+	fmt.Println("  - StreamAudio (bidirectional streaming)")
+	fmt.Println("  - EndSession")
+	fmt.Println("  - GetSessionTranscriptions")
+	fmt.Println("  - SearchTranscriptions")
+	fmt.Println("\nPress Ctrl+C to stop\n")
+
+	go func() {
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+		<-sigChan
+
+		fmt.Println("\n🛑 Shutting down gracefully...")
+		grpcServer.GracefulStop()
+		fmt.Println("✅ Server stopped")
+		os.Exit(0)
+	}()
+
+	if err := grpcServer.Serve(listener); err != nil {
+		log.Fatalf("❌ Failed to serve: %v", err)
+	}
 
 	// Mantém o servidor rodando
 	select {}
