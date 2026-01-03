@@ -1,0 +1,108 @@
+syntax = "proto3";
+
+package transcription;
+
+option go_package = "github.com/Ant0nioSouza/GoVox/api/proto";
+
+// Serviço de transcrição de áudio
+service TranscriptionService {
+  // Cria uma nova sessão de transcrição
+  rpc CreateSession(CreateSessionRequest) returns (CreateSessionResponse);
+  
+  // Stream de áudio para transcrição (bidirecional)
+  // Cliente envia chunks de áudio, servidor responde com transcrições
+  rpc StreamAudio(stream AudioChunk) returns (stream TranscriptionResult);
+  
+  // Finaliza uma sessão
+  rpc EndSession(EndSessionRequest) returns (EndSessionResponse);
+  
+  // Busca transcrições de uma sessão
+  rpc GetSessionTranscriptions(GetSessionTranscriptionsRequest) returns (GetSessionTranscriptionsResponse);
+  
+  // Busca por texto (full-text search)
+  rpc SearchTranscriptions(SearchTranscriptionsRequest) returns (SearchTranscriptionsResponse);
+}
+
+// ==================== Messages ====================
+
+// Criar sessão
+message CreateSessionRequest {
+  map<string, string> metadata = 1; // Metadados opcionais
+}
+
+message CreateSessionResponse {
+  string session_id = 1; // UUID da sessão
+  string created_at = 2; // Timestamp ISO 8601
+}
+
+// Stream de áudio
+message AudioChunk {
+  string session_id = 1; // UUID da sessão
+  int32 chunk_sequence = 2; // Número sequencial do chunk
+  bytes audio_data = 3; // Dados do áudio (raw bytes)
+  string audio_format = 4; // Formato: "wav", "mp3", "opus", etc
+  int32 sample_rate = 5; // Ex: 16000, 44100
+  int32 channels = 6; // 1 = mono, 2 = stereo
+}
+
+message TranscriptionResult {
+  string session_id = 1;
+  int32 chunk_sequence = 2;
+  string language = 3; // Idioma detectado: "pt", "en", etc
+  string text = 4; // Texto transcrito
+  double confidence = 5; // Confiança: 0.0 a 1.0
+  double duration_seconds = 6;
+  string created_at = 7;
+  bool is_final = 8; // Se é resultado final ou parcial
+}
+
+// Finalizar sessão
+message EndSessionRequest {
+  string session_id = 1;
+  string status = 2; // "completed", "error", "paused"
+}
+
+message EndSessionResponse {
+  bool success = 1;
+  string message = 2;
+  int32 total_chunks = 3;
+  double total_duration_seconds = 4;
+  string primary_language = 5;
+}
+
+// Buscar transcrições
+message GetSessionTranscriptionsRequest {
+  string session_id = 1;
+  int32 limit = 2; // Padrão: 100
+  int32 offset = 3; // Padrão: 0
+}
+
+message GetSessionTranscriptionsResponse {
+  repeated Transcription transcriptions = 1;
+  int32 total_count = 2;
+}
+
+message Transcription {
+  int64 id = 1;
+  string session_id = 2;
+  int32 chunk_sequence = 3;
+  string language = 4;
+  string text = 5;
+  double confidence = 6;
+  double duration_seconds = 7;
+  string audio_format = 8;
+  int32 sample_rate = 9;
+  int32 channels = 10;
+  string created_at = 11;
+}
+
+// Busca full-text
+message SearchTranscriptionsRequest {
+  string query = 1;
+  int32 limit = 2; // Padrão: 50
+}
+
+message SearchTranscriptionsResponse {
+  repeated Transcription transcriptions = 1;
+  int32 total_count = 2;
+}
