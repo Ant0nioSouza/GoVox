@@ -1,0 +1,33 @@
+# .gitignore
+# Binários
+/audio-transcriber
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Arquivos temporários
+*.log
+*.tmp
+*.temp
+
+# Configuração local
+.env
+
+# Dependências
+/vendor/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Modelos Whisper (são grandes)
+models/*.bin
+
+# Dados de teste
+testdata/audio/*
+!testdata/audio/.gitkeep
