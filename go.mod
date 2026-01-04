@@ -11,6 +11,7 @@ require (
 )
 
 require (
+	github.com/ggerganov/whisper.cpp/bindings/go v0.0.0-20251231162720-e9898ddfb908 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
