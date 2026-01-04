@@ -204,13 +204,45 @@ func (s *Server) processAudioChunk(ctx context.Context, audioChunk *pb.AudioChun
 	// TODO: Implementar processamento do chunk de áudio
 	// Por enquanto vamos simular
 
-	time.Sleep(50 * time.Millisecond) // Simula tempo de processamento
-	transcriptionOutput := &TranscriptionOutput{
-		Language:   "pt",
-		Text:       fmt.Sprintf("Transcription of chunk #%d", audioChunk.ChunkSequence),
-		Confidence: .97,
-		Duration:   float64(len(audioChunk.AudioData)) / float64(audioChunk.SampleRate*audioChunk.Channels*2), // estimativa
+	var transcriptionOutput *TranscriptionOutput
+
+	if s.transcriber != nil {
+		result, err := s.transcriber.Transcribe(ctx, audioChunk.AudioData, audioChunk.AudioFormat, int(audioChunk.SampleRate), int(audioChunk.Channels))
+		if err != nil {
+			log.Printf("Error during transcription: %v", err)
+			// Fallback para mock
+			transcriptionOutput = &TranscriptionOutput{
+				Language:   "pt",
+				Text:       fmt.Sprintf("Transcription of chunk #%d (fallback)", audioChunk.ChunkSequence),
+				Confidence: 0.50,
+				Duration:   float64(len(audioChunk.AudioData)) / float64(audioChunk.SampleRate*audioChunk.Channels*2),
+			}
+		} else {
+			transcriptionOutput = &TranscriptionOutput{
+				Language:   result.Language,
+				Text:       result.Text,
+				Confidence: result.Confidence,
+				Duration:   result.Duration,
+			}
+		}
+	} else {
+		// Usa mock quando Whisper não está disponível
+		time.Sleep(100 * time.Millisecond)
+		transcriptionOutput = &TranscriptionOutput{
+			Language:   "pt",
+			Text:       fmt.Sprintf("Transcription of chunk #%d (mock)", audioChunk.ChunkSequence),
+			Confidence: 0.97,
+			Duration:   float64(len(audioChunk.AudioData)) / float64(audioChunk.SampleRate*audioChunk.Channels*2),
+		}
 	}
+
+	time.Sleep(50 * time.Millisecond) // Simula tempo de processamento
+	//transcriptionOutput := &TranscriptionOutput{
+	//	Language:   "pt",
+	//	Text:       fmt.Sprintf("Transcription of chunk #%d", audioChunk.ChunkSequence),
+	//	Confidence: .97,
+	//	Duration:   float64(len(audioChunk.AudioData)) / float64(audioChunk.SampleRate*audioChunk.Channels*2), // estimativa
+	//}
 
 	// Salva no banco
 	sessionID, err := uuid.Parse(audioChunk.SessionId)

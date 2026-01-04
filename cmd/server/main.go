@@ -19,6 +19,7 @@ import (
 	pb "github.com/Ant0nioSouza/GoVox/api/proto"
 	"github.com/Ant0nioSouza/GoVox/internal/database"
 	grpcserver "github.com/Ant0nioSouza/GoVox/internal/grpc"
+	"github.com/Ant0nioSouza/GoVox/internal/transcriber"
 	"github.com/Ant0nioSouza/GoVox/pkg/models"
 	"github.com/Ant0nioSouza/GoVox/pkg/utils"
 )
@@ -63,7 +64,16 @@ func main() {
 		stats["acquired_conns"], stats["max_conns"], stats["idle_conns"])
 
 	// TODO: Inicializar o whisper aqui
-	var transcriber grpcserver.TranscriberInterface
+	fmt.Println("🔄 Initializing whisper...")
+	modelPath := getEnv("WHISPER_MODEL_PATH", "models/ggml-base.bin")
+
+	whisperTranscriber, err := transcriber.NewWhisperTranscriber(modelPath)
+	if err != nil {
+		log.Fatalf("❌ Failed to initialize Whisper transcriber: %v", err)
+	}
+	defer whisperTranscriber.Close()
+
+	fmt.Println("✅ Whisper transcriber initialized")
 
 	fmt.Println("🔧 Setting up gRPC server...")
 	grpcServer := grpc.NewServer(
@@ -72,7 +82,7 @@ func main() {
 	)
 
 	// Registra o serviço
-	transcriptionServer := grpcserver.NewServer(db, transcriber)
+	transcriptionServer := grpcserver.NewServer(db, NewTranscriberAdapter(whisperTranscriber))
 	pb.RegisterTranscriptionServiceServer(grpcServer, transcriptionServer)
 
 	reflection.Register(grpcServer)
@@ -111,6 +121,29 @@ func main() {
 
 	// Mantém o servidor rodando
 	select {}
+}
+
+// TranscriberAdapter wraps WhisperTranscriber to match the TranscriberInterface
+type TranscriberAdapter struct {
+	transcriber *transcriber.WhisperTranscriber
+}
+
+// NewTranscriberAdapter creates a new adapter for WhisperTranscriber
+func NewTranscriberAdapter(t *transcriber.WhisperTranscriber) grpcserver.TranscriberInterface {
+	return &TranscriberAdapter{transcriber: t}
+}
+
+// Transcribe adapts the return type from TranscriptionResult to TranscriptionOutput
+func (a *TranscriberAdapter) Transcribe(ctx context.Context, audioData []byte, language string, sampleRate int, channels int) (*grpcserver.TranscriptionOutput, error) {
+	result, err := a.transcriber.Transcribe(ctx, audioData, language, sampleRate, channels)
+	if err != nil {
+		return nil, err
+	}
+	return &grpcserver.TranscriptionOutput{
+		Text:       result.Text,
+		Language:   result.Language,
+		Confidence: result.Confidence,
+	}, nil
 }
 
 // testDatabase executa testes básicos no banco
